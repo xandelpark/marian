@@ -1,5 +1,5 @@
 """
-네이버 블로그 자동 발행 모듈 (jarvis_core.py에서 추출)
+네이버 블로그 자동 발행 모듈 (jarvis_core.py 원본 그대로)
 프로젝트 1: 웨딩 사진 블로그 자동 포스팅에 활용
 
 의존성: playwright (pip install playwright && playwright install chromium)
@@ -33,51 +33,16 @@ async def save_naver_session(state_file: str, blog_id: str):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 2. 네이버 블로그 발행 (핵심 함수)
+# 2. 네이버 블로그 발행 (jarvis_core.py 원본 그대로)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async def upload_to_naver_blog(
-    title: str,
-    content: str,
-    image_paths: list,
-    state_file: str,
-    blog_id: str,
-    video_path: str = None
-) -> bool:
-    """
-    네이버 블로그에 글+이미지+동영상을 자동 발행
-
-    Args:
-        title: 블로그 제목
-        content: 본문 텍스트 ([SECTION_BREAK]로 섹션 구분)
-        image_paths: 이미지 파일 경로 리스트
-        state_file: 네이버 로그인 세션 파일 경로
-        blog_id: 네이버 블로그 ID
-        video_path: (선택) 동영상 파일 경로
-
-    Returns:
-        True: 발행 성공, False: 발행 실패
-
-    사용 예시:
-        success = await upload_to_naver_blog(
-            title="강남 더채플 본식스냅 - 촬영작가만 아는 빛의 비밀",
-            content="안녕하세요 마리안웨딩입니다.[SECTION_BREAK]강남 더채플은...",
-            image_paths=["/path/to/img1.jpg", "/path/to/img2.jpg"],
-            state_file="naver_state.json",
-            blog_id="marianwedding"
-        )
-    """
-    print(f"\n[블로그 퍼블리싱] {blog_id} 작업 시작...")
+async def upload_to_naver_blog(title, content, image_paths, state_file, blog_id, video_path=None):
+    print(f"\n🚀 [블로그 퍼블리싱] {blog_id} 작업 시작...")
     abs_image_paths = [os.path.abspath(p) for p in image_paths]
-
-    # 마크다운 특수문자 제거
     for char in ["*", "#", "`", "~", ">"]:
         content = content.replace(char, "")
-
-    # 섹션 분리 → 이미지 균등 배분
     raw_chunks = content.split("[SECTION_BREAK]")
     chunks = [chunk.strip() for chunk in raw_chunks if chunk.strip()]
     num_images = len(abs_image_paths)
-
     if num_images > 0 and chunks:
         if len(chunks) >= num_images:
             merged, per, remainder, idx = [], len(chunks) // num_images, len(chunks) % num_images, 0
@@ -91,8 +56,7 @@ async def upload_to_naver_blog(
             for chunk in chunks:
                 parts = re.split(r"(?<=[.!?])\s+", chunk)
                 for p in parts:
-                    if len(p.strip()) > 8:
-                        all_sentences.append(p.strip())
+                    if len(p.strip()) > 8: all_sentences.append(p.strip())
             if len(all_sentences) >= num_images:
                 per, remainder, new_chunks, idx = len(all_sentences) // num_images, len(all_sentences) % num_images, [], 0
                 for i in range(num_images):
@@ -101,94 +65,45 @@ async def upload_to_naver_blog(
                     idx += take
                 chunks = new_chunks
             else:
-                while len(chunks) < num_images:
-                    chunks.append(chunks[-1] if chunks else "")
-
+                while len(chunks) < num_images: chunks.append(chunks[-1] if chunks else "")
     num_text_chunks = len(chunks)
     browser = None
-
     try:
         async with async_playwright() as p:
-            # 브라우저 실행 (사람처럼 보이도록 slow_mo 적용)
             browser = await p.chromium.launch(headless=False, slow_mo=random.randint(150, 350))
-            context_pw = await browser.new_context(
-                storage_state=state_file,
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            )
+            context_pw = await browser.new_context(storage_state=state_file, user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
             page = await context_pw.new_page()
-            page.set_default_timeout(60000)  # 기본 타임아웃 60초로 증가
-
-            # 블로그 글쓰기 페이지 이동
-            print("[1/6] 글쓰기 페이지 이동 중...")
-            await page.goto(f"https://blog.naver.com/{blog_id}?Redirect=Write", timeout=60000)
-            await page.wait_for_load_state("networkidle", timeout=60000)
-            print(f"[1/6] 현재 URL: {page.url}")
-
-            # iframe 찾기
-            print("[2/6] 에디터 iframe 찾는 중...")
-            await asyncio.sleep(5)
-
-            # iframe 존재 확인
-            iframes = page.frames
-            print(f"[2/6] 발견된 프레임 수: {len(iframes)}")
-            for f in iframes:
-                print(f"  - {f.name}: {f.url[:80]}")
-
+            await page.goto(f"https://blog.naver.com/{blog_id}?Redirect=Write")
+            await page.wait_for_load_state("networkidle")
             frame = page.frame_locator("iframe#mainFrame")
-            await asyncio.sleep(3)
+            await asyncio.sleep(random.uniform(4.0, 6.0))
             await page.keyboard.press("Escape")
-
-            # 방해 요소 숨기기
-            print("[3/6] 에디터 초기화 중...")
-            try:
-                await frame.locator("body").evaluate("""() => {
-                    const style = document.createElement('style');
-                    style.innerHTML = `button[data-name="strike"], .se-popup-toolbar, .se-help-panel { display: none !important; }`;
-                    document.head.appendChild(style);
-                }""")
-            except Exception as e:
-                print(f"  방해 요소 처리 실패 (무시): {e}")
+            await frame.locator("body").evaluate("""() => { const style = document.createElement('style'); style.innerHTML = `button[data-name="strike"], .se-popup-toolbar, .se-help-panel { display: none !important; }`; document.head.appendChild(style); }""")
             try:
                 cancel_btn = frame.locator(".se-popup-button-cancel, .se-help-panel-close-button").first
-                if await cancel_btn.is_visible(timeout=3000):
-                    await cancel_btn.click()
-            except:
-                pass
-
-            # === 제목 입력 ===
-            print("[4/6] 제목 입력 중...")
+                if await cancel_btn.is_visible(timeout=3000): await cancel_btn.click()
+            except: pass
             title_area = frame.locator(".se-title-text").first
             await title_area.click(click_count=3, force=True)
             await asyncio.sleep(random.uniform(0.5, 1.2))
             await page.keyboard.press("Backspace")
             await asyncio.sleep(0.5)
-            safe_title = title if title.strip() else "포스팅"
+            safe_title = title if title.strip() else "리뷰 포스팅"
             for char in safe_title:
                 await page.keyboard.type(char, delay=random.randint(50, 150))
             await asyncio.sleep(random.uniform(1.0, 2.5))
-
-            # === 본문 영역 클릭 ===
-            print("[5/6] 본문 입력 중...")
             try:
                 main_canvas = frame.locator(".se-main-container, .se-viewer, .se-content").first
                 await main_canvas.click(position={"x": 50, "y": 50}, force=True)
-            except:
-                await page.mouse.click(500, 500)
+            except: await page.mouse.click(500, 500)
             await asyncio.sleep(1)
             await page.keyboard.press("Enter")
-
-            # === 텍스트 + 이미지 교차 입력 ===
             max_loop = max(num_text_chunks, num_images)
             for i in range(max_loop):
-                # 텍스트 입력
                 if i < num_text_chunks and chunks[i]:
-                    for char in chunks[i]:
-                        await page.keyboard.type(char, delay=random.randint(20, 60))
+                    for char in chunks[i]: await page.keyboard.type(char, delay=random.randint(20, 60))
                     await asyncio.sleep(random.uniform(1.0, 3.5))
-                    await page.keyboard.press("Enter")
-                    await page.keyboard.press("Enter")
-
-                # 이미지 업로드
+                    await page.keyboard.press("Enter"); await page.keyboard.press("Enter")
                 if i < num_images:
                     await page.keyboard.press("Escape")
                     await asyncio.sleep(random.uniform(0.5, 1.5))
@@ -198,93 +113,58 @@ async def upload_to_naver_blog(
                     await asyncio.sleep(random.uniform(8.0, 12.0))
                     await page.keyboard.press("ArrowRight")
                     await asyncio.sleep(random.uniform(0.5, 1.5))
-                    await page.keyboard.press("Enter")
-                    await page.keyboard.press("Enter")
-
-            # === 동영상 업로드 (선택) ===
+                    await page.keyboard.press("Enter"); await page.keyboard.press("Enter")
             if video_path and os.path.exists(video_path):
                 try:
-                    await page.keyboard.press("Enter")
-                    await page.keyboard.press("Enter")
+                    await page.keyboard.press("Enter"); await page.keyboard.press("Enter")
                     await asyncio.sleep(2.0)
                     await frame.locator("button[data-name='video']").first.click(force=True)
                     await asyncio.sleep(2.5)
-                    btn_selectors = [
-                        "button.nvu_btn_append.nvu_local",
-                        "button.nvu_btn_local",
-                        "button[class*='nvu_btn_local']"
-                    ]
+                    btn_selectors = ["button.nvu_btn_append.nvu_local", "button.nvu_btn_local", "button[class*='nvu_btn_local']"]
                     video_uploaded = False
                     for sel in btn_selectors:
                         try:
                             async with page.expect_file_chooser(timeout=15000) as fc_info:
                                 await frame.locator(sel).first.click(force=True)
                             await (await fc_info.value).set_files(os.path.abspath(video_path))
-                            video_uploaded = True
-                            break
-                        except:
-                            pass
+                            video_uploaded = True; break
+                        except: pass
                     if video_uploaded:
                         await asyncio.sleep(random.uniform(3.0, 5.0))
                         try:
                             title_input = frame.locator("#nvu_inp_box_title").first
                             if await title_input.is_visible(timeout=8000):
-                                await title_input.click()
-                                await title_input.fill(title)
-                                await asyncio.sleep(0.8)
-                        except:
-                            pass
+                                await title_input.click(); await title_input.fill(title); await asyncio.sleep(0.8)
+                        except: pass
                         for method_js in [
                             "document.querySelector('button.nvu_btn_submit.nvu_btn_type2').click()",
                             "Array.from(document.querySelectorAll('button.nvu_btn_type2')).find(b=>b.innerText.trim()==='완료')?.click()"
                         ]:
-                            try:
-                                await frame.evaluate(method_js)
-                                await asyncio.sleep(2.0)
-                                break
-                            except:
-                                pass
+                            try: await frame.evaluate(method_js); await asyncio.sleep(2.0); break
+                            except: pass
                         await asyncio.sleep(random.uniform(20.0, 30.0))
-                        await page.keyboard.press("ArrowRight")
-                        await asyncio.sleep(1.0)
+                        await page.keyboard.press("ArrowRight"); await asyncio.sleep(1.0)
                 except Exception as ve:
-                    print(f"동영상 업로드 오류: {ve}")
-
-            # === 사람처럼 스크롤 (테스트 시 짧게) ===
-            for _ in range(random.randint(1, 2)):
-                await page.mouse.wheel(0, random.choice([-300, 300]))
-                await asyncio.sleep(random.uniform(1.0, 2.0))
-            await asyncio.sleep(random.randint(2, 5))
-
-            # === 발행 버튼 클릭 ===
-            print("[6/6] 발행 중...")
-            await frame.locator("body").evaluate("""() => {
-                const topBtn = document.querySelector('.se-publish-button')
-                    || Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === '발행');
-                if(topBtn) topBtn.click();
-            }""")
+                    print(f"⚠️ 동영상 업로드 오류: {ve}")
+            human_delay = random.randint(20, 50)
+            for _ in range(random.randint(2, 5)):
+                await page.mouse.wheel(0, random.choice([-300, 300, 500, -500]))
+                await asyncio.sleep(random.uniform(2.0, 5.0))
+            await asyncio.sleep(max(1, human_delay - 15))
+            await frame.locator("body").evaluate("""() => { const topBtn = document.querySelector('.se-publish-button') || Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === '발행'); if(topBtn) topBtn.click(); }""")
             await asyncio.sleep(random.uniform(2.0, 4.0))
-
-            # === 발행 확인 버튼 클릭 ===
-            await frame.locator("body").evaluate("""() => {
-                const confirmBtn = document.querySelector('.se-btn-publish, .confirm_btn')
-                    || Array.from(document.querySelectorAll('button')).reverse().find(b => b.innerText.trim() === '발행');
-                if(confirmBtn) confirmBtn.click();
-            }""")
+            await frame.locator("body").evaluate("""() => { const confirmBtn = document.querySelector('.se-btn-publish, .confirm_btn') || Array.from(document.querySelectorAll('button')).reverse().find(b => b.innerText.trim() === '발행'); if(confirmBtn) confirmBtn.click(); }""")
             await asyncio.sleep(15)
-
             return True
-
     except Exception as e:
-        print(f"블로그 발행 오류: {e}")
+        print(f"🚨 블로그 발행 오류: {e}")
         return False
     finally:
-        if browser:
-            await browser.close()
+        if browser: await browser.close()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 3. 블로그 계정 설정 (jarvis_core.py에서 추출)
+# 3. 블로그 계정 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BLOG_ACCOUNTS = {
     "웨딩": {"state_file": "naver_state.json", "blog_id": "marianwedding", "brand": "마리안웨딩"},
@@ -296,7 +176,7 @@ BLOG_ACCOUNTS = {
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 4. 블로그 트리거 목록 (jarvis_core.py에서 추출)
+# 4. 블로그 트리거 목록
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BLOG_TRIGGERS = {
     "블로그 웨딩":   {"brand": "마리안웨딩",    "state_file": "naver_state.json",        "blog_id": "marianwedding"},

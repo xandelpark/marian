@@ -24,7 +24,7 @@ def search_wedding_hall_info(venue_name: str) -> str:
 특징: (웨딩홀 공식 특징 1~3줄)"""
     try:
         result = subprocess.run(
-            ["claude", "--print", "-p", prompt],
+            ["claude", "--print", "--allowedTools", "mcp__fetch__fetch,WebSearch,WebFetch", "-p", prompt],
             capture_output=True, text=True, timeout=60, cwd="/tmp",
         )
         if result.returncode != 0:

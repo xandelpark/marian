@@ -4,13 +4,13 @@
 
 사용법:
     # 1. 먼저 세션 저장 (최초 1회)
-    python naver_blog_publisher.py 세션 웨딩
+    python naver_blog_publisher.py 세션 아트
 
-    # 2. 테스트 발행 (테스트용 사진 경로 수정 필요)
+    # 2. 테스트 발행 (사진 없이 글만 생성)
     python test_blog_publish.py
 
     # 3. 실제 폴더 지정 발행
-    python test_blog_publish.py --folder /path/to/250301.아무개신부님
+    python test_blog_publish.py --folder /path/to/250301.아무개신부님 --venue 영등포jk
 """
 import asyncio
 import os
@@ -21,33 +21,9 @@ from blog_content_generator import generate_wedding_blog, normalize_venue_name
 from naver_blog_publisher import upload_to_naver_blog
 
 # 설정
-BLOG_ID = "marianwedding"
-STATE_FILE = "naver_state.json"
+BLOG_ID = "artcollective"
+STATE_FILE = "naver_state_art.json"
 MAX_PHOTOS = 30  # 최대 업로드 사진 수
-
-
-def parse_folder_name(folder_name: str) -> dict:
-    """
-    폴더명에서 날짜와 이름 추출
-    예: "250301.아무개신부님" → {"date": "2025년 3월 1일", "name": "아무개"}
-        "250301.아무개" → {"date": "2025년 3월 1일", "name": "아무개"}
-    """
-    match = re.match(r"(\d{6})\.(.+)", folder_name)
-    if not match:
-        return None
-
-    date_str = match.group(1)
-    name_raw = match.group(2)
-
-    # 날짜 파싱 (YYMMDD)
-    yy, mm, dd = int(date_str[:2]), int(date_str[2:4]), int(date_str[4:6])
-    year = 2000 + yy
-    date_formatted = f"{year}년 {mm}월 {dd}일"
-
-    # 이름에서 "신부님" 제거
-    name = name_raw.replace("신부님", "").strip()
-
-    return {"date": date_formatted, "name": name}
 
 
 def get_photos_from_folder(folder_path: str, max_count: int = MAX_PHOTOS) -> list:
@@ -72,36 +48,25 @@ def get_photos_from_folder(folder_path: str, max_count: int = MAX_PHOTOS) -> lis
 
 async def run_test(folder_path: str = None, venue_short: str = "영등포jk"):
     """테스트 실행"""
-    # 1. 폴더 정보 파싱
+    # 1. 폴더에서 사진 가져오기
     if folder_path:
-        folder_name = os.path.basename(folder_path)
-        info = parse_folder_name(folder_name)
-        if not info:
-            print(f"폴더명 형식 오류: {folder_name}")
-            print("형식: YYMMDD.이름 (예: 250301.아무개신부님)")
-            return
         photos = get_photos_from_folder(folder_path)
         if not photos:
             print(f"사진 없음: {folder_path}")
             return
     else:
         # 테스트 모드 - 사진 없이 글만 생성
-        info = {"date": "2025년 3월 1일", "name": "아무개"}
         photos = []
         print("테스트 모드 (사진 없이 글만 생성)")
 
     # 2. 웨딩홀 이름 정규화
     venue = normalize_venue_name(venue_short)
-    print(f"\n촬영일: {info['date']}")
-    print(f"신부님: {info['name']}")
-    print(f"웨딩홀: {venue_short} → {venue}")
+    print(f"\n웨딩홀: {venue_short} → {venue}")
 
     # 3. 블로그 글 생성
     print(f"\n블로그 글 생성 중...")
     result = generate_wedding_blog(
         venue_name=venue,
-        bride_name=info["name"],
-        shoot_date=info["date"],
         num_photos=len(photos) if photos else 30,
     )
 
@@ -125,7 +90,7 @@ async def run_test(folder_path: str = None, venue_short: str = "영등포jk"):
 
     if not os.path.exists(STATE_FILE):
         print(f"\n세션 파일 없음: {STATE_FILE}")
-        print("먼저 실행: python naver_blog_publisher.py 세션 웨딩")
+        print("먼저 실행: python naver_blog_publisher.py 세션 아트")
         return
 
     confirm = input("\n발행하시겠습니까? (y/n): ").strip().lower()

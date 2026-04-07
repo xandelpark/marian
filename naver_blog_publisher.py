@@ -116,20 +116,38 @@ async def upload_to_naver_blog(
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             )
             page = await context_pw.new_page()
+            page.set_default_timeout(60000)  # 기본 타임아웃 60초로 증가
 
             # 블로그 글쓰기 페이지 이동
-            await page.goto(f"https://blog.naver.com/{blog_id}?Redirect=Write")
-            await page.wait_for_load_state("networkidle")
+            print("[1/6] 글쓰기 페이지 이동 중...")
+            await page.goto(f"https://blog.naver.com/{blog_id}?Redirect=Write", timeout=60000)
+            await page.wait_for_load_state("networkidle", timeout=60000)
+            print(f"[1/6] 현재 URL: {page.url}")
+
+            # iframe 찾기
+            print("[2/6] 에디터 iframe 찾는 중...")
+            await asyncio.sleep(5)
+
+            # iframe 존재 확인
+            iframes = page.frames
+            print(f"[2/6] 발견된 프레임 수: {len(iframes)}")
+            for f in iframes:
+                print(f"  - {f.name}: {f.url[:80]}")
+
             frame = page.frame_locator("iframe#mainFrame")
-            await asyncio.sleep(random.uniform(4.0, 6.0))
+            await asyncio.sleep(3)
             await page.keyboard.press("Escape")
 
             # 방해 요소 숨기기
-            await frame.locator("body").evaluate("""() => {
-                const style = document.createElement('style');
-                style.innerHTML = `button[data-name="strike"], .se-popup-toolbar, .se-help-panel { display: none !important; }`;
-                document.head.appendChild(style);
-            }""")
+            print("[3/6] 에디터 초기화 중...")
+            try:
+                await frame.locator("body").evaluate("""() => {
+                    const style = document.createElement('style');
+                    style.innerHTML = `button[data-name="strike"], .se-popup-toolbar, .se-help-panel { display: none !important; }`;
+                    document.head.appendChild(style);
+                }""")
+            except Exception as e:
+                print(f"  방해 요소 처리 실패 (무시): {e}")
             try:
                 cancel_btn = frame.locator(".se-popup-button-cancel, .se-help-panel-close-button").first
                 if await cancel_btn.is_visible(timeout=3000):
@@ -138,6 +156,7 @@ async def upload_to_naver_blog(
                 pass
 
             # === 제목 입력 ===
+            print("[4/6] 제목 입력 중...")
             title_area = frame.locator(".se-title-text").first
             await title_area.click(click_count=3, force=True)
             await asyncio.sleep(random.uniform(0.5, 1.2))
@@ -149,6 +168,7 @@ async def upload_to_naver_blog(
             await asyncio.sleep(random.uniform(1.0, 2.5))
 
             # === 본문 영역 클릭 ===
+            print("[5/6] 본문 입력 중...")
             try:
                 main_canvas = frame.locator(".se-main-container, .se-viewer, .se-content").first
                 await main_canvas.click(position={"x": 50, "y": 50}, force=True)
@@ -230,13 +250,14 @@ async def upload_to_naver_blog(
                 except Exception as ve:
                     print(f"동영상 업로드 오류: {ve}")
 
-            # === 사람처럼 스크롤 ===
-            for _ in range(random.randint(2, 5)):
-                await page.mouse.wheel(0, random.choice([-300, 300, 500, -500]))
-                await asyncio.sleep(random.uniform(2.0, 5.0))
-            await asyncio.sleep(random.randint(5, 35))
+            # === 사람처럼 스크롤 (테스트 시 짧게) ===
+            for _ in range(random.randint(1, 2)):
+                await page.mouse.wheel(0, random.choice([-300, 300]))
+                await asyncio.sleep(random.uniform(1.0, 2.0))
+            await asyncio.sleep(random.randint(2, 5))
 
             # === 발행 버튼 클릭 ===
+            print("[6/6] 발행 중...")
             await frame.locator("body").evaluate("""() => {
                 const topBtn = document.querySelector('.se-publish-button')
                     || Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === '발행');
